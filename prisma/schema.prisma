@@ -1,0 +1,452 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id           String             @id @default(cuid())
+  name         String
+  document     String?            @unique // CPF ou CNPJ
+  status       OrganizationStatus @default(TRIAL)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  
+  users        User[]
+  materials    Material[]
+  suppliers    Supplier[]
+  customers    Customer[]
+  serviceTypes ServiceType[]
+  orders       Order[]
+  supplies     Supply[]
+  equipments   Equipment[]
+  settings     OrganizationSettings?
+  transactions FinancialTransaction[]
+  orderLogs    OrderLog[]
+}
+
+model Material {
+  id                 String           @id @default(cuid())
+  organizationId     String
+  organization       Organization     @relation(fields: [organizationId], references: [id])
+  supplierId         String
+  name               String
+  category           MaterialCategory @default(ADHESIVE)
+  unit               MaterialUnit     @default(M2)
+  pricePerRoll       Decimal          @db.Decimal(10, 2)
+  rollLength         Decimal?         @db.Decimal(10, 2)
+  width              Decimal?         @db.Decimal(10, 2)
+  volume             Decimal?         @db.Decimal(10, 2)
+  costPerLinearMeter Decimal?         @db.Decimal(10, 2)
+  costPerSqMeter     Decimal?         @db.Decimal(10, 2)
+  costPerMl          Decimal?         @db.Decimal(10, 2)
+  stockAmount        Decimal          @default(0) @db.Decimal(10, 2)
+  minStock           Decimal          @default(0) @db.Decimal(10, 2)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  
+  supplier           Supplier        @relation(fields: [supplierId], references: [id])
+  entries            MaterialEntry[]
+  orderItems         OrderItem[]
+
+  @@index([organizationId])
+  @@index([supplierId])
+}
+
+model MaterialEntry {
+  id             String   @id @default(cuid())
+  organizationId String
+  materialId     String
+  supplierId     String?
+  quantity       Float
+  createdAt      DateTime @default(now())
+  note           String?
+  material       Material @relation(fields: [materialId], references: [id])
+  supplier       Supplier? @relation(fields: [supplierId], references: [id])
+
+  @@index([organizationId])
+  @@index([materialId])
+  @@index([supplierId])
+}
+
+model Supplier {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  name           String
+  document       String?
+  email          String?
+  phone          String?
+  address        String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  materialEntries MaterialEntry[]
+  materials      Material[]
+  supplies       Supply[]
+  equipments     Equipment[]
+
+  @@index([organizationId])
+}
+
+model Customer {
+  id             String    @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  document       String?
+  email          String?
+  phone          String
+  address        String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  orders         Order[]
+
+  @@index([organizationId])
+}
+
+model ServiceType {
+  id                   String      @id @default(cuid())
+  organizationId       String
+  organization         Organization @relation(fields: [organizationId], references: [id])
+  name                 String
+  billingType          BillingType
+  defaultPrice         Decimal?    @db.Decimal(10, 2)
+  operationalCostPerM2 Decimal?    @default(0) @db.Decimal(10, 2)
+  wastePercentage      Decimal?    @default(0) @db.Decimal(5, 2)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  orderItems           OrderItem[]
+
+  @@index([organizationId])
+}
+
+model Order {
+  id                   String                 @id @default(cuid())
+  organizationId       String
+  organization         Organization           @relation(fields: [organizationId], references: [id])
+  customerId           String?
+  customerName         String
+  type                 OrderType              @default(ORDER)
+  status               OrderStatus            @default(PENDING)
+  totalAmount          Decimal                @db.Decimal(10, 2)
+  totalCost            Decimal                @db.Decimal(10, 2)
+  totalMaterialCost    Decimal                @default(0) @db.Decimal(10, 2)
+  totalOperationalCost Decimal                @default(0) @db.Decimal(10, 2)
+  totalFinishingCost   Decimal                @default(0) @db.Decimal(10, 2)
+  totalEquipmentCost   Decimal                @default(0) @db.Decimal(10, 2)
+  totalSupplyCost      Decimal                @default(0) @db.Decimal(10, 2)
+  totalServiceCommission Decimal                @db.Decimal(10, 2)
+  profit               Decimal                @db.Decimal(10, 2)
+  margin               Decimal                @db.Decimal(5, 2)
+  serviceCommissionRate  Decimal                @default(0) @db.Decimal(5, 2)
+  discountType         DiscountType           @default(PERCENTAGE)
+  discountValue        Decimal                @default(0) @db.Decimal(10, 2)
+  aplicadorId          String?
+  creatorId            String?
+  approvedAt           DateTime?
+  validUntil           DateTime?
+  deletedAt            DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  
+  customer             Customer?              @relation(fields: [customerId], references: [id])
+  transactions         FinancialTransaction[]
+  creator              User?                  @relation("OrderCreator", fields: [creatorId], references: [id])
+  aplicador            User?                  @relation("OrderVendedor", fields: [aplicadorId], references: [id])
+  equipments           OrderEquipment[]
+  items                OrderItem[]
+  logs                 OrderLog[]
+  supplies             OrderSupply[]
+
+  @@index([customerId])
+  @@index([aplicadorId])
+  @@index([organizationId])
+}
+
+model OrderItem {
+  id              String               @id @default(cuid())
+  orderId         String
+  serviceTypeId   String
+  materialId      String?
+  width           Decimal              @default(0) @db.Decimal(10, 2)
+  height          Decimal              @default(0) @db.Decimal(10, 2)
+  mlUsed          Decimal              @default(0) @db.Decimal(10, 2)
+  quantity        Int                  @default(1)
+  wastePercentage Decimal              @default(0) @db.Decimal(5, 2)
+  price           Decimal              @db.Decimal(10, 2)
+  cost            Decimal              @db.Decimal(10, 2)
+  operationalCost Decimal              @default(0) @db.Decimal(10, 2)
+  material        Material?            @relation(fields: [materialId], references: [id])
+  order           Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  serviceType     ServiceType          @relation(fields: [serviceTypeId], references: [id])
+  finishings      OrderItemFinishing[]
+
+  @@index([orderId])
+  @@index([serviceTypeId])
+  @@index([materialId])
+}
+
+model OrderItemFinishing {
+  id          String    @id @default(cuid())
+  orderItemId String
+  name        String
+  price       Decimal   @db.Decimal(10, 2)
+  cost        Decimal   @default(0) @db.Decimal(10, 2)
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@index([orderItemId])
+}
+
+model Supply {
+  id               String        @id @default(cuid())
+  organizationId   String
+  organization     Organization  @relation(fields: [organizationId], references: [id])
+  name             String
+  unit             String
+  unitCost         Decimal       @db.Decimal(10, 2)
+  consumptionPerM2 Decimal?      @db.Decimal(10, 4)
+  stockAmount      Decimal       @default(0) @db.Decimal(10, 2)
+  minStock         Decimal       @default(0) @db.Decimal(10, 2)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  supplierId       String
+  supplier         Supplier      @relation(fields: [supplierId], references: [id])
+  orderSupplies    OrderSupply[]
+
+  @@index([organizationId])
+  @@index([supplierId])
+}
+
+model Equipment {
+  id              String           @id @default(cuid())
+  organizationId  String
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  name            String
+  dailyCost       Decimal          @db.Decimal(10, 2)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  supplierId      String
+  supplier        Supplier         @relation(fields: [supplierId], references: [id])
+  orderEquipments OrderEquipment[]
+
+  @@index([organizationId])
+  @@index([supplierId])
+}
+
+model OrderSupply {
+  id        String  @id @default(cuid())
+  orderId   String
+  supplyId  String
+  quantity  Decimal @db.Decimal(10, 2)
+  unitCost  Decimal @db.Decimal(10, 2)
+  totalCost Decimal @db.Decimal(10, 2)
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  supply    Supply  @relation(fields: [supplyId], references: [id])
+
+  @@index([orderId])
+  @@index([supplyId])
+}
+
+model OrderEquipment {
+  id          String    @id @default(cuid())
+  orderId     String
+  equipmentId String
+  days        Int
+  dailyCost   Decimal   @db.Decimal(10, 2)
+  totalCost   Decimal   @db.Decimal(10, 2)
+  equipment   Equipment @relation(fields: [equipmentId], references: [id])
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([equipmentId])
+}
+
+model OrganizationSettings {
+  id                   String   @id @default(cuid())
+  organizationId       String   @unique
+  organization         Organization @relation(fields: [organizationId], references: [id])
+  businessName         String?
+  address              String?
+  phone                String?
+  email                String?
+  taxId                String?
+  logoUrl              String?
+  serviceCommissionBase String   @default("GROSS_REVENUE")
+  minimumMarginAllowed Decimal  @default(35) @db.Decimal(5, 2)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  logoDarkUrl          String?
+
+  @@index([organizationId])
+}
+
+model User {
+  id              String           @id @default(uuid())
+  organizationId  String
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  usuario         String           @unique
+  nomeCompleto    String
+  email           String           @unique
+  senhaHash       String
+  perfil          Role             @default(OPERADOR)
+  status          UserStatus       @default(ATIVO)
+  telefone        String?
+  fotoPerfil      String?
+  ultimoLogin     DateTime?
+  observacoes     String?
+  deletedAt       DateTime?
+  criadoPorId     String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  createdLogs     AuditLog[]       @relation("UserActionCreated")
+  auditLogs       AuditLog[]       @relation("UserActionResponsible")
+  ordersCreated   Order[]          @relation("OrderCreator")
+  servicosRealizados Order[]          @relation("OrderVendedor")
+  orderLogs       OrderLog[]       @relation("OrderLogs")
+  criadoPor       User?            @relation("UserCreator", fields: [criadoPorId], references: [id])
+  usuariosCriados User[]           @relation("UserCreator")
+  permissoes      UserPermission[]
+
+  @@index([organizationId])
+}
+
+model AuditLog {
+  id                   String   @id @default(uuid())
+  organizationId       String?
+  idUsuarioCriado      String?
+  idUsuarioResponsavel String?
+  acao                 String
+  ip                   String?
+  createdAt            DateTime @default(now())
+  targetId             String?
+  usuarioCriado        User?    @relation("UserActionCreated", fields: [idUsuarioCriado], references: [id])
+  usuarioResponsavel   User?    @relation("UserActionResponsible", fields: [idUsuarioResponsavel], references: [id])
+
+  @@index([organizationId])
+  @@index([idUsuarioResponsavel])
+}
+
+model UserPermission {
+  id         String  @id @default(uuid())
+  userId     String
+  modulo     String
+  visualizar Boolean @default(false)
+  criar      Boolean @default(false)
+  editar     Boolean @default(false)
+  excluir    Boolean @default(false)
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, modulo])
+  @@index([userId])
+}
+
+model OrderLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  orderId        String
+  userId         String?
+  action         String
+  previousStatus String?
+  newStatus      String?
+  reason         String?
+  createdAt      DateTime @default(now())
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user           User?    @relation("OrderLogs", fields: [userId], references: [id])
+
+  @@index([orderId])
+  @@index([userId])
+  @@index([organizationId])
+}
+
+model FinancialTransaction {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  type           TransactionType
+  status         TransactionStatus @default(PENDING)
+  description    String
+  amount         Decimal           @db.Decimal(10, 2)
+  dueDate        DateTime          @db.Date
+  paymentDate    DateTime?         @db.Date
+  paymentMethod  String?
+  category       String?
+  orderId        String?
+  entityName     String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  order          Order?            @relation(fields: [orderId], references: [id])
+
+  @@index([organizationId])
+  @@index([orderId])
+}
+
+enum MaterialCategory {
+  ADHESIVE
+  LIQUID
+}
+
+enum MaterialUnit {
+  M2
+  ML
+}
+
+enum BillingType {
+  FIXED
+  PER_M2
+}
+
+enum OrderStatus {
+  DRAFT
+  QUOTATION
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderType {
+  QUOTATION
+  ORDER
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  GESTOR
+  OPERADOR
+  CLIENTE
+}
+
+enum UserStatus {
+  ATIVO
+  INATIVO
+  BLOQUEADO
+}
+
+enum TransactionType {
+  PAYABLE
+  RECEIVABLE
+}
+
+enum TransactionStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum OrganizationStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
