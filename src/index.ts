@@ -37,7 +37,14 @@ server.register(swaggerUi, {
   routePrefix: '/docs',
 });
 
-// Registro de Rotas com Autenticação
+import { authRoutes } from './routes/auth';
+
+// Registro de Rotas Públicas
+server.register(async (instance) => {
+  instance.register(authRoutes, { prefix: '/auth' });
+}, { prefix: '/v1' });
+
+// Registro de Rotas com Autenticação (Requerem ApiKey)
 server.register(async (instance) => {
   instance.addHook('preHandler', authMiddleware);
   instance.register(quotationRoutes, { prefix: '/quotations' });
