@@ -3,6 +3,8 @@ import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { quotationRoutes } from './routes/quotations';
+import { syncRoutes } from './routes/sync';
+import { authMiddleware } from './middlewares/auth';
 
 const server = fastify({
   logger: true,
@@ -35,8 +37,12 @@ server.register(swaggerUi, {
   routePrefix: '/docs',
 });
 
-// Registro de Rotas
-server.register(quotationRoutes, { prefix: '/v1/quotations' });
+// Registro de Rotas com Autenticação
+server.register(async (instance) => {
+  instance.addHook('preHandler', authMiddleware);
+  instance.register(quotationRoutes, { prefix: '/quotations' });
+  instance.register(syncRoutes, { prefix: '/sync' });
+}, { prefix: '/v1' });
 
 // Health Check
 server.get('/health', async () => {
